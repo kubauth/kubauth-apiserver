@@ -1,0 +1,79 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- if .Values.remove }}
+  name: {{ .Config.UnPatcherJobName }}-{{ .Values.idx }}
+  {{- else }}
+  name: {{ .Config.PatcherJobName }}-{{ .Values.idx }}
+  {{- end }}
+  namespace: {{ .Config.KubauthKitNamespace }}
+  {{- with .Values.ownerReferences }}
+  ownerReferences:
+  - apiVersion: v1
+    kind: Pod
+    name: {{ .name }}
+    uid: {{ .uid }}
+    blockOwnerDeletion: true
+    controller: true
+  {{- end }}
+spec:
+  ttlSecondsAfterFinished: {{ .Values.ttlSecondsAfterFinished }}
+  backoffLimit: 5
+  parallelism: 1
+  completions: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubauth-apiserver-{{ .Values.idx }}
+        app.kubernetes.io/instance: {{ .Values.idx }}
+    spec:
+      serviceAccountName: {{ .Config.PatcherServiceAccountName }}
+      nodeName: {{ .Values.nodeName }}
+      securityContext:
+        runAsUser: 0
+      {{- with .Config.PatcherImagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: patch
+          image: {{ .Config.PatcherImage }}
+          imagePullPolicy: {{ .Config.PatcherImagePullPolicy }}
+          args:
+            - patch
+            - --configFile
+            - /config.yaml
+            - --logMode
+            - {{ .Values.log.mode }}
+            - --logLevel
+            - {{ .Values.log.level }}
+            - --nodeName
+            - {{ .Values.nodeName }}
+            {{- if .Values.mark }}
+            - --mark
+            {{- end }}
+            {{- if .Values.force }}
+            - --force
+            {{- end }}
+            {{- if .Values.remove }}
+            - --remove
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: true
+          volumeMounts:
+            - mountPath: /etc/kubernetes
+              name: kube-conf
+              readOnly: false
+            - mountPath: /config.yaml
+              name: config
+              subPath: config.yaml
+      volumes:
+        - name: kube-conf
+          hostPath:
+            path: /etc/kubernetes
+            type: Directory
+        - name: config
+          configMap:
+            name: {{ .Config.ConfigMapName }}
+      restartPolicy: Never

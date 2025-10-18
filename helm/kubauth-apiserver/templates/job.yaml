@@ -1,0 +1,114 @@
+
+# Install job
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "monitorJobName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubauth-kit.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- include "job.spec" (dict "ctx" . "toRemove" false) }}
+
+
+# Removal job
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "monitorJobName" . }}-removal
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubauth-kit.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-delete
+    "helm.sh/hook-delete-policy": before-hook-creation # hook-succeeded
+  {{- with .Values.commonAnnotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- include "job.spec" (dict "ctx" . "toRemove" true) }}
+
+
+{{/*
+Expand job spec
+*/}}
+{{- define "job.spec" }}
+spec:
+  backoffLimit: 5
+  ttlSecondsAfterFinished: {{ .ctx.Values.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      {{- with .ctx.Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ include "monitorJobName" .ctx }}
+        app.kubernetes.io/instance: {{ include "monitorJobName" .ctx }}
+    spec:
+      {{- with .ctx.Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: monitor
+          image: {{ .ctx.Values.image.repository }}:{{ .ctx.Values.image.tag | default .ctx.Chart.AppVersion }}
+          imagePullPolicy: {{ .ctx.Values.image.pullPolicy }}
+          args:
+            - monitor
+            - --configFile
+            - /config.yaml
+            - --logMode
+            - {{ .ctx.Values.logger.mode }}
+            - --logLevel
+            - {{ .ctx.Values.logger.level }}
+            {{- if .toRemove }}
+            - --remove
+            {{- end }}
+          env:
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: MY_POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          {{- with .ctx.Values.extraEnv }}
+            {{- toYaml . | nindent 4 }}
+          {{- end }}
+          {{- with .ctx.Values.resources }}
+          resources:
+          {{- toYaml . | nindent 4 }}
+          {{ end }}
+          securityContext:
+            {{- toYaml .ctx.Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            - mountPath: /config.yaml
+              name: config
+              subPath: config.yaml
+      serviceAccountName: {{ include "serviceAccountName" .ctx }}
+      securityContext:
+        {{- toYaml .ctx.Values.podSecurityContext | nindent 8 }}
+      {{- with .ctx.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .ctx.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .ctx.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "configmapName" .ctx }}
+      restartPolicy: Never
+{{- end }}

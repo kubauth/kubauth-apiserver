@@ -1,0 +1,75 @@
+---
+file: {{ .Config.ApiServerManifestPath }}
+backup: true
+backupFolder: {{ .Config.BackupFolder }}
+tmpFolder: {{ .Config.TmpFolder }}
+remove: {{ .Values.remove }}
+blockOperations:
+  - block: |
+      - mountPath: /etc/kubernetes/kubauth-kit
+        name: kubauth-kit-config
+    marker: "# Kubauth-kit config 1/2 hacking {mark}"
+    insertAfter: "^.*volumeMounts:.*"
+    indent: 4
+  - block: |
+      - hostPath:
+          path: /etc/kubernetes/kubauth-kit
+          type: ""
+        name: kubauth-kit-config
+    marker: "# Kubauth-kit config 2/2 hacking {mark}"
+    insertAfter: "^.*volumes:.*"
+    indent: 2
+lineOperations:
+  - line: "- \"--oidc-issuer-url={{ .Config.Oidc.IssuerURL }}\""
+    regex: "^.*oidc-issuer-url.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+
+  - line: "- --oidc-client-id={{ .Config.Oidc.ClientId }}"
+    regex: "^.*oidc-client-id.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+
+  - line: "- --oidc-username-claim={{ .Config.Oidc.UsernameClaim }}"
+    regex: "^.*oidc-username-claim.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+
+  - line: "- \"--oidc-username-prefix={{ .Config.Oidc.UsernamePrefix }}\""
+    regex: "^.*oidc-username-prefix.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+
+  - line: "- --oidc-groups-claim={{ .Config.Oidc.GroupsClaim }}"
+    regex: "^.*oidc-groups-claim.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+
+  - line: "- \"--oidc-groups-prefix={{ .Config.Oidc.GroupsPrefix }}\""
+    regex: "^.*oidc-groups-prefix.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+
+  - line: "- \"--oidc-ca-file={{ .Values.issuerCaFile }}\""
+    regex: "^.*oidc-ca-file.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+
+  {{- if .Config.Oidc.RequiredClaims }}
+  {{- range $k, $v := .Config.Oidc.RequiredClaims }}
+  - line: "- \"--oidc-required-claim={{ $k }}={{ $v }}\""
+    regex: "^.*oidc-required-claim={{ $k }}.*"
+    insertAfter: "^.*- kube-apiserver.*"
+    indent: 4
+  {{- end }}
+  {{- end }}
+
+  - line: "dnsPolicy: ClusterFirstWithHostNet"
+    regex: "^.*dnsPolicy:.*"
+    insertAfter: "^.*hostNetwork:.*"
+    indent: 2
+
+
+
+
+

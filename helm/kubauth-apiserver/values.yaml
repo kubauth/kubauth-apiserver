@@ -1,0 +1,107 @@
+#    Copyright 2025 Kubotal
+#
+#    Licensed under the Apache License, Version 2.0 (the "License");
+#    you may not use this file except in compliance with the License.
+#    You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS,
+#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#    See the License for the specific language governing permissions and
+#    limitations under the License.
+
+
+logger:
+  mode: json
+  level: info
+
+# Image is same for controller and webhook
+image:
+  pullSecrets: []
+  repository: quay.io/kubauth/exec/kubauth-apiserver
+  # -- Overrides the image tag whose default is the chart appVersion.
+  tag:
+  pullPolicy: IfNotPresent
+
+config:
+  apiServerNamespace: kube-system
+  apiServerPodName: kube-apiserver
+
+  apiServerManifestPath: /etc/kubernetes/manifests/kube-apiserver.yaml
+  kubernetesCAPath: /etc/kubernetes/pki/ca.crt
+  kubauthKitFolder: /etc/kubernetes/kubauth-kit
+  backupFolder: /etc/kubernetes/bck
+  tmpFolder: /etc/kubernetes/tmp
+  timeoutApiServerDown: "30s"
+  timeoutApiServerUp: "4m"
+  oidc:
+    issuerURL: # TBD
+    issuerCaData: # If not set, will be fulfilled with secret below
+    issuerCaSecretName: certs-bundle  # If we use trust-manager (from certificate-server)
+    issuerCaName: ca.crt
+    clientId: k8s
+    usernameClaim: sub
+    usernamePrefix: "-" # Dash is no prefix.
+    groupsClaim: groups
+    groupsPrefix: "oidc-" # A prefix is mandatory
+    requiredClaims: {}
+
+# Duration before the finished job will be cleaned
+ttlSecondsAfterFinished: 60
+
+additionalArgs: {}
+
+extraEnv: {}
+
+resources: {}
+#    If you want to specify resources, uncomment the following
+#    lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+#    limits:
+#      cpu: 100m
+#      memory: 200Mi
+#    requests:
+#      cpu: 100m
+#      memory: 100Mi
+
+
+# Security Context for container
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - "ALL"
+
+# -- Security Context for the whole pod
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Nodeselector for monitor job
+nodeSelector: {}
+
+# -- Tolerations for monitor job
+tolerations: []
+
+# -- Affinity ffor monitor job
+affinity: {}
+
+# Object renaming. Default values should be fine in must cases.
+baseNameOverride:
+
+configmapName:
+serviceAccountName:
+clusterRoleName:
+monitorJobName:
+patcherJobName:
+unPatcherJobName:
+
+
+
+# -- Annotations to be added to the pod
+podAnnotations: {}
+# -- Annotations to be added to all other resources
+commonAnnotations: {}

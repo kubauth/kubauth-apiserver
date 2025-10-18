@@ -1,0 +1,52 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "configmapName" . }}
+  labels:
+    {{- include "kubauth-kit.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  config.yaml: |
+    apiServerNamespace: {{ .Values.config.apiServerNamespace}}
+    apiServerPodName: {{ .Values.config.apiServerPodName}}
+    patcherImage: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+    patcherImagePullPolicy: {{ .Values.image.pullPolicy }}
+    {{- with .Values.image.pullSecrets }}
+    patcherImagePullSecrets:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    patcherServiceAccountName: {{ include "serviceAccountName" . }}
+    patcherJobName: {{ include "patcherJobName" .}}
+    unPatcherJobName: {{ include "unPatcherJobName" .}}
+    configMapName: {{ include "configmapName" .}}
+    apiServerManifestPath: {{ .Values.config.apiServerManifestPath}}
+    kubernetesCAPath: {{ .Values.config.kubernetesCAPath }}
+    kubauthKitFolder: {{ .Values.config.kubauthKitFolder }}
+    backupFolder: {{ .Values.config.backupFolder }}
+    tmpFolder: {{ .Values.config.tmpFolder }}
+    kubauthKitNamespace: {{ .Release.Namespace }}
+    timeoutApiServerDown: {{ .Values.config.timeoutApiServerDown }}
+    timeoutApiServerUp: {{ .Values.config.timeoutApiServerUp }}
+    oidc:
+      issuerURL: {{ required "config.oidc.issuerURL must be defined" .Values.config.oidc.issuerURL }}
+      {{- with .Values.config.oidc.issuerCaData }}
+      issuerCaData: {{ . }}
+      {{- end }}
+      issuerCaSecretName: {{ .Values.config.oidc.issuerCaSecretName }}
+      {{- with .Values.config.oidc.issuerCaName }}
+      issuerCaName: {{ . }}
+      {{- end }}
+      clientId: {{ .Values.config.oidc.clientId }}
+      usernameClaim: {{ .Values.config.oidc.usernameClaim }}
+      usernamePrefix: "{{ .Values.config.oidc.usernamePrefix }}"
+      groupsClaim: {{ .Values.config.oidc.groupsClaim }}
+      groupsPrefix: "{{ .Values.config.oidc.groupsPrefix }}"
+      {{- if .Values.config.oidc.requiredClaims }}
+      requiredClaims:
+        {{- toYaml .Values.config.oidc.requiredClaims | nindent 10 }}
+      {{- end }}
+
