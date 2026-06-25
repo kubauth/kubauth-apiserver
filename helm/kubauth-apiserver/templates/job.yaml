@@ -56,7 +56,7 @@ spec:
       {{- end }}
       containers:
         - name: monitor
-          image: {{ .ctx.Values.image.repository }}:{{ .ctx.Values.image.tag | default .ctx.Chart.AppVersion }}
+          image: {{ .ctx.Values.image.repository | default .Chart.Annotations.kubotal_image_repository }}:{{ .ctx.Values.image.tag | default .ctx.Chart.AppVersion }}
           imagePullPolicy: {{ .ctx.Values.image.pullPolicy }}
           args:
             - monitor

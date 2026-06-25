@@ -12,16 +12,28 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 
+# Image and chart registry — Must be set via dev.env or from environment.
+# Intentionally empty in this makefile, as we want user to set REGISTRY
+# explicitly. Targets that need it depend on `check-registry`, which fails with
+# a clear message when it is unset.
+# Main official repository is quay.io/kubauth
+REGISTRY ?= ""
+
+
+# Per-developer overrides (git-ignored, optional).
+# The leading '-' makes a missing file a silent no-op, so this never breaks.
+-include dev.env
+
+
+# The product VERSIONS below are intentionally NOT overridable from dev.env or from environment.
+# They are code-bound and git-controlled (see the ':=' assignment type).
+
 APP_VERSION ?= 0.2.1-snapshot
-HELM_KUBAUTH_APISERVER_VERSION ?= 0.2.1-snapshot
+HELM_VERSION ?= 0.2.1-snapshot
 
-DOCKER_TAG=${APP_VERSION}
+IMG_REPO := $(REGISTRY)/exec/kubauth-apiserver
 
-IMG ?= quay.io/kubauth/exec/kubauth-apiserver:${DOCKER_TAG}
-
-IMG_UBUNTU ?= quay.io/kubauth/exec/kubauth-apiserver:${DOCKER_TAG}-ubuntu
-
-HELM_DOCKER_REPO := quay.io/kubauth/charts
+HELM_DOCKER_REPO := $(REGISTRY)/charts
 
 # To authenticate for pushing in quay repo (img) (Use encrypted password):
 # docker login quay.io
@@ -81,50 +93,69 @@ version: ## Set version in binary
 
 ##@ Build
 
+
+##@ Build
+
+.PHONY: check-registry
+check-registry: ## Fail with a clear message if REGISTRY is not set
+	@if [ -z "$(strip $(REGISTRY))" ]; then \
+		echo "ERROR: REGISTRY is not set."; \
+		echo "Set it in dev.env, export it in your environment, or pass it on the command line, e.g.:"; \
+		echo "    make $(or $(MAKECMDGOALS),<target>) REGISTRY=quay.io/my-organization"; \
+		exit 1; \
+	fi
+
+.PHONY: display
+display:  ## Display current config values
+	@echo "---------"
+	@echo "REGISTRY: $(REGISTRY)"
+	@echo "APP_VERSION: $(APP_VERSION)"
+	@echo "HELM_VERSION: $(HELM_VERSION)"
+	@echo "BUILD_TS: $(BUILD_TS)"
+	@echo "---------"
+
+
 .PHONY: build
 build:  ## Build kubauth-apiserver binaries
 	CGO_ENABLED=0 go build -o bin/kubauth-apiserver main.go
 
-
 ##@ Docker
 
 .PHONY: docker
-docker: version docker-build docker-push  ## Build controller docker image and push
+docker: version display docker-build docker-push  ## Build controller docker image and push
 
 .PHONY: docker-build
-docker-build: version ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+docker-build: check-registry version ## Build docker image with the manager.
+	$(CONTAINER_TOOL) build -t $(IMG_REPO):$(APP_VERSION) .
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+docker-push: check-registry ## Push docker image with the manager.
+	$(CONTAINER_TOOL) push $(IMG_REPO):$(APP_VERSION)
 
 
 .PHONY: docker-ubuntu
-docker-ubuntu: version docker-ubuntu-build docker-ubuntu-push  ## Build controller docker image using Ubuntu 22.04  and push
+docker-ubuntu: version display docker-ubuntu-build docker-ubuntu-push  ## Build controller docker image using Ubuntu 22.04  and push
 
 .PHONY: docker-ubuntu-build
-docker-ubuntu-build: version ## Build docker image using Ubuntu 22.04 as base
-	$(CONTAINER_TOOL) build --build-arg RUNTIME_BASE=ubuntu:22.04 -t ${IMG_UBUNTU} .
+docker-ubuntu-build: check-registry version ## Build docker image using Ubuntu 22.04 as base
+	$(CONTAINER_TOOL) build --build-arg RUNTIME_BASE=ubuntu:22.04 -t $(IMG_REPO):$(APP_VERSION)-ubuntu .
 
 .PHONY: docker-ubuntu-push
-docker-ubuntu-push: ## Push docker image using Ubuntu 22.04  with the manager.
-	$(CONTAINER_TOOL) push ${IMG_UBUNTU}
+docker-ubuntu-push: check-registry ## Push docker image using Ubuntu 22.04  with the manager.
+	$(CONTAINER_TOOL) push $(IMG_REPO):$(APP_VERSION)-ubuntu
 
 
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
-# architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
+# architectures. To use this option you need to:
 # - be able to use docker buildx. More info: https://docs.docker.com/build/buildx/
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-# - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
-# To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-#PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
+# - be able to push the image to your registry
 PLATFORMS ?= linux/arm64,linux/amd64
 .PHONY: docker-buildx
-docker-buildx: version  ## Build and push docker image for the manager for cross-platform support
+docker-buildx: check-registry display version  ## Build and push docker image for the manager for cross-platform support
 	- $(CONTAINER_TOOL) buildx create --name kubauth-apiserver-builder --driver=docker-container
-	- $(CONTAINER_TOOL) buildx build --builder kubauth-apiserver-builder --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile .
+	- $(CONTAINER_TOOL) buildx build --builder kubauth-apiserver-builder --push --platform=$(PLATFORMS) --tag $(IMG_REPO):$(APP_VERSION) -f Dockerfile .
 	- $(CONTAINER_TOOL) buildx rm kubauth-apiserver-builder
 
 
@@ -136,7 +167,7 @@ define CHART_YAML
 # File generated by Makefile
 apiVersion: v2
 name: kubauth-apiserver
-version: $(HELM_KUBAUTH_APISERVER_VERSION)
+version: $(HELM_VERSION)
 appVersion: $(APP_VERSION)
 description: "Kubauth-apiserver: A kubernetes OIDC integration tool (API server configuration support)"
 keywords:
@@ -150,16 +181,18 @@ sources:
 maintainers:
   - name: kubauth
     url: https://github.com/kubauth
+annotations:
+  kubotal_image_repository: $(IMG_REPO)
 endef
 export CHART_YAML
 
 .PHONY: chart-yaml
-chart-yaml: ## Generate the helm/kubauth-apiserver/Chart.yaml
+chart-yaml: check-registry ## Generate the helm/kubauth-apiserver/Chart.yaml
 	echo "$$CHART_YAML" >./helm/kubauth-apiserver/Chart.yaml
 
 .PHONY: chart
-chart: chart-yaml ## Build and push kubauth-apiserver helm chart
-	cd ./helm && helm package -d ./../tmp kubauth-apiserver && helm push ./../tmp/kubauth-apiserver-${HELM_KUBAUTH_APISERVER_VERSION}.tgz oci://${HELM_DOCKER_REPO}
+chart: check-registry display chart-yaml ## Build and push kubauth-apiserver helm chart
+	cd ./helm && helm package -d ./../tmp kubauth-apiserver && helm push ./../tmp/kubauth-apiserver-${HELM_VERSION}.tgz oci://${HELM_DOCKER_REPO}
 
 # ---------------------------
 ##@ Dependencies
