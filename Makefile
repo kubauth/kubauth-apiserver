@@ -28,8 +28,8 @@ REGISTRY ?= ""
 # The product VERSIONS below are intentionally NOT overridable from dev.env or from environment.
 # They are code-bound and git-controlled (see the ':=' assignment type).
 
-APP_VERSION ?= 0.2.1-snapshot
-HELM_VERSION ?= 0.2.1-snapshot
+APP_VERSION := 0.2.1-snapshot
+HELM_VERSION := 0.2.1-snapshot
 
 IMG_REPO := $(REGISTRY)/exec/kubauth-apiserver
 
